@@ -17,7 +17,5 @@ if uploaded_file is not None:
     st.write("Rows:", df.shape[0])
     st.write("Columns:", df.shape[1])
 
-    st.subheader("First 10 Rows of the Dataset")
-    st.write(df.head(10))
 
     
