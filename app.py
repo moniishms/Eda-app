@@ -25,5 +25,38 @@ if data_frames:
     else:
         merged_df = pd.concat(data_frames, axis=1)
     st.write("Merged DataFrame:")
-    st.dataframe(merged_df.head(15))
-    
+    st.dataframe(merged_df)
+    st.write(f"Shape of merged DataFrame: {merged_df.shape}")
+    st.title("Data cleaning Part")
+    st.write("No of missing values in each column:")
+    st.write(merged_df.isnull().sum())
+    st.write("Data types of each column:")
+    st.write(merged_df.dtypes)
+    missing_columns=merged_df.columns[merged_df.isnull().any()]
+    if len(missing_columns) > 0:
+        st.write("Columns with missing values:")
+        for col in missing_columns:
+            st.write(f"{col}: {merged_df[col].isnull().sum()} missing values")
+            if merged_df[col].dtype in ['float64', 'int64']:
+                options = ["Mean", "Median", "Mode", "Drop Rows","Skip"]
+            else:
+                options = ["Mode", "Drop Rows","Skip"]
+            option = st.selectbox(f"Cleaning for {col}",options,key=col)
+            if option == "Mean":
+                merged_df[col]=merged_df[col].fillna(merged_df[col].mean())  
+            elif option == "Median":
+                merged_df[col]=merged_df[col].fillna(merged_df[col].median())  
+            elif option == "Mode":
+                merged_df[col]=merged_df[col].fillna(merged_df[col].mode()[0])  
+            elif option == "Drop Rows":
+                merged_df = merged_df.drop(columns=[col]) 
+    else:
+        st.write("No columns with missing values.")
+    st.write("Cleaned DataFrame:")
+    st.dataframe(merged_df)
+    csv = merged_df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+    label="Download Cleaned Data",
+    data=csv,
+    file_name="cleaned_data.csv",
+    mime="text/csv")
