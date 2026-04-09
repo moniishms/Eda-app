@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.title("Excel File Upload and Viewer")
 num=st.number_input("Enter the number of files to upload",min_value=1, max_value=5,step=1)
@@ -60,3 +62,22 @@ if data_frames:
     data=csv,
     file_name="cleaned_data.csv",
     mime="text/csv")
+    st.title("EDA visualization:")
+    col=st.selectbox("Select the column for your visualization",merged_df.columns)
+    if merged_df[col].dtype in ["float64","int64"]:
+        fig, ax=plt.subplots()
+        sns.histplot(merged_df[col],kde=True,ax=ax)
+        st.pyplot(fig)
+    else:
+        fig, ax=plt.subplots()
+        sns.countplot(x=merged_df[col],ax=ax)
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+    st.write("### Correlation Heatmap")
+    numeric_df = merged_df.select_dtypes(include=['float64', 'int64'])
+    if not numeric_df.empty:
+        fig, ax = plt.subplots()
+        sns.heatmap(numeric_df.corr(), annot=True, cmap="coolwarm", ax=ax)
+        st.pyplot(fig)
+    else:
+        st.write("No numeric columns available") 
