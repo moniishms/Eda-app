@@ -26,6 +26,8 @@ if data_frames:
         merged_df = pd.concat(data_frames, ignore_index=True)
     else:
         merged_df = pd.concat(data_frames, axis=1)
+    if "cleaned_df" not in st.session_state:
+        st.session_state.cleaned_df = merged_df.copy()
     st.write("Merged DataFrame:")
     st.dataframe(merged_df)
     st.write(f"Shape of merged DataFrame: {merged_df.shape}")
@@ -38,46 +40,29 @@ if data_frames:
     if len(missing_columns) > 0:
         st.write("Columns with missing values:")
         for col in missing_columns:
-            st.write(f"{col}: {merged_df[col].isnull().sum()} missing values")
-            if merged_df[col].dtype in ['float64', 'int64']:
-                options = ["Mean", "Median", "Mode", "Drop Rows","Skip"]
-            else:
-                options = ["Mode", "Drop Rows","Skip"]
-            option = st.selectbox(f"Cleaning for {col}",options,key=col)
-            if option == "Mean":
-                merged_df[col]=merged_df[col].fillna(merged_df[col].mean())  
-            elif option == "Median":
-                merged_df[col]=merged_df[col].fillna(merged_df[col].median())  
-            elif option == "Mode":
-                merged_df[col]=merged_df[col].fillna(merged_df[col].mode()[0])  
-            elif option == "Drop Rows":
-                merged_df = merged_df.drop(columns=[col]) 
+            with st.expander(f"{col} ({merged_df[col].isnull().sum()} missing values)"):
+                if merged_df[col].dtype in ['float64', 'int64']:
+                    options = ["Mean", "Median", "Mode", "Drop Rows", "Skip"]
+                else:
+                    options = ["Mode", "Drop Rows", "Skip"]
+
+                option = st.selectbox(f"Cleaning method for {col}", options, key=col)
+
+                if option == "Mean":
+                    st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].mean())
+                elif option == "Median":
+                    st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].median())
+                elif option == "Mode":
+                    st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].mode()[0])
+                elif option == "Drop Rows":
+                    st.session_state.cleaned_df = st.session_state.cleaned_df.dropna(subset=[col])
     else:
         st.write("No columns with missing values.")
     st.write("Cleaned DataFrame:")
-    st.dataframe(merged_df)
-    csv = merged_df.to_csv(index=False).encode('utf-8')
+    st.dataframe(st.session_state.cleaned_df)
+    csv = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
     st.download_button(
     label="Download Cleaned Data",
     data=csv,
     file_name="cleaned_data.csv",
     mime="text/csv")
-    st.title("EDA visualization:")
-    col=st.selectbox("Select the column for your visualization",merged_df.columns)
-    if merged_df[col].dtype in ["float64","int64"]:
-        fig, ax=plt.subplots()
-        sns.histplot(merged_df[col],kde=True,ax=ax)
-        st.pyplot(fig)
-    else:
-        fig, ax=plt.subplots()
-        sns.countplot(x=merged_df[col],ax=ax)
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-    st.write("### Correlation Heatmap")
-    numeric_df = merged_df.select_dtypes(include=['float64', 'int64'])
-    if not numeric_df.empty:
-        fig, ax = plt.subplots()
-        sns.heatmap(numeric_df.corr(), annot=True, cmap="coolwarm", ax=ax)
-        st.pyplot(fig)
-    else:
-        st.write("No numeric columns available") 
