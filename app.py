@@ -26,6 +26,7 @@ if data_frames:
         merged_df = pd.concat(data_frames, ignore_index=True)
     else:
         merged_df = pd.concat(data_frames, axis=1)
+        merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
     if "cleaned_df" not in st.session_state:
         st.session_state.cleaned_df = merged_df.copy()
     st.write("Merged DataFrame:")
@@ -36,28 +37,73 @@ if data_frames:
     st.write(merged_df.isnull().sum())
     st.write("Data types of each column:")
     st.write(merged_df.dtypes)
-    missing_columns=merged_df.columns[merged_df.isnull().any()]
-    if len(missing_columns) > 0:
-        st.write("Columns with missing values:")
-        for col in missing_columns:
-            with st.expander(f"{col} ({merged_df[col].isnull().sum()} missing values)"):
-                if merged_df[col].dtype in ['float64', 'int64']:
-                    options = ["Mean", "Median", "Mode", "Drop Rows", "Skip"]
-                else:
-                    options = ["Mode", "Drop Rows", "Skip"]
+    st.write("Columns available for cleaning:")
+    st.write(f"Total columns: {len(merged_df.columns)}")
+    
+    # Select columns to clean - only from columns that exist in cleaned_df
+    available_cols = [col for col in merged_df.columns if col in st.session_state.cleaned_df.columns]
+    selected_columns = st.multiselect(
+        "Select columns to clean (or select all):",
+        options=available_cols,
+        default=available_cols
+    )
+    
+    if selected_columns:
+        # Option to apply same method to all selected columns
+        apply_to_all = st.checkbox("Apply same cleaning method to all selected columns")
+        
+        if apply_to_all:
+            cleaning_method = st.selectbox("Select cleaning method for all selected columns:", 
+                                          ["Mean", "Median", "Mode", "Drop Rows", "Skip"])
+            
+            if st.button("Apply cleaning"):
+                for col in selected_columns:
+                    if col not in st.session_state.cleaned_df.columns:
+                        continue
+                    
+                    if cleaning_method == "Skip":
+                        pass
+                    elif cleaning_method == "Mean":
+                        if st.session_state.cleaned_df[col].dtype in ['float64', 'int64']:
+                            st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].mean())
+                    elif cleaning_method == "Median":
+                        if st.session_state.cleaned_df[col].dtype in ['float64', 'int64']:
+                            st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].median())
+                    elif cleaning_method == "Mode":
+                        mode_values = st.session_state.cleaned_df[col].mode()
+                        if len(mode_values) > 0:
+                            st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(mode_values[0])
+                    elif cleaning_method == "Drop Rows":
+                        st.session_state.cleaned_df = st.session_state.cleaned_df.dropna(subset=[col])
+                st.success("Cleaning applied!")
+        else:
+            # Individual column cleaning
+            st.write("Or clean columns individually:")
+            for idx, col in enumerate(selected_columns):
+                with st.expander(f"{col} ({st.session_state.cleaned_df[col].isnull().sum()} missing values)"):
+                    if st.session_state.cleaned_df[col].dtype in ['float64', 'int64']:
+                        options = ["Mean", "Median", "Mode", "Drop Rows", "Skip"]
+                    else:
+                        options = ["Mode", "Drop Rows", "Skip"]
 
-                option = st.selectbox(f"Cleaning method for {col}", options, key=col)
+                    option = st.selectbox(f"Cleaning method for {col}", options, key=f"{idx}_{col}")
 
-                if option == "Mean":
-                    st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].mean())
-                elif option == "Median":
-                    st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].median())
-                elif option == "Mode":
-                    st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].mode()[0])
-                elif option == "Drop Rows":
-                    st.session_state.cleaned_df = st.session_state.cleaned_df.dropna(subset=[col])
-    else:
-        st.write("No columns with missing values.")
+                    if col not in st.session_state.cleaned_df.columns:
+                        st.warning(f"Column {col} no longer exists. Skipping.")
+                    elif option == "Skip":
+                        pass
+                    elif option == "Mean":
+                        st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].mean())
+                    elif option == "Median":
+                        st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(st.session_state.cleaned_df[col].median())
+                    elif option == "Mode":
+                        mode_values = st.session_state.cleaned_df[col].mode()
+                        if len(mode_values) > 0:
+                            st.session_state.cleaned_df[col] = st.session_state.cleaned_df[col].fillna(mode_values[0])
+                        else:
+                            st.warning(f"No mode found for {col}. Skipping.")
+                    elif option == "Drop Rows":
+                        st.session_state.cleaned_df = st.session_state.cleaned_df.dropna(subset=[col])
     st.write("Cleaned DataFrame:")
     st.dataframe(st.session_state.cleaned_df)
     csv = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
