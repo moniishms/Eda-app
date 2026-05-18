@@ -2,6 +2,22 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import hashlib
+
+if "cleaned_df" not in st.session_state:
+    st.session_state.cleaned_df = pd.DataFrame()
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+if "selected_columns" not in st.session_state:
+    st.session_state.selected_columns = []
+
+if "merged_df" not in st.session_state:
+    st.session_state.merged_df = pd.DataFrame()
+
+if "csv_data" not in st.session_state:
+    st.session_state.csv_data = b""
 
 st.title("Excel File Upload and Viewer")
 
@@ -14,7 +30,6 @@ num = st.number_input(
 
 uploaded_files = []
 data_frames = []
-available_cols = []
 
 for i in range(num):
 
@@ -43,7 +58,7 @@ for files in uploaded_files:
 
         st.error(f"Error reading {files.name}: {e}")
 
-if data_frames:
+if uploaded_files and data_frames:
 
     merge_type = st.selectbox(
         "Select merge type",
@@ -52,7 +67,7 @@ if data_frames:
 
     if merge_type == "Row-wise":
 
-        merged_df = pd.concat(
+        temp_merged_df = pd.concat(
             data_frames,
             ignore_index=True
         )
@@ -61,7 +76,7 @@ if data_frames:
 
         row_counts = [len(df) for df in data_frames]
 
-        if len(set(row_counts)) != 1:
+        if len(data_frames) > 1 and len(set(row_counts)) != 1:
 
             st.error(
                 "All files must have same number of rows for column-wise merge."
@@ -69,13 +84,13 @@ if data_frames:
 
             st.stop()
 
-        merged_df = pd.concat(
+        temp_merged_df = pd.concat(
             data_frames,
             axis=1
         )
 
-        duplicate_cols = merged_df.columns[
-            merged_df.columns.duplicated()
+        duplicate_cols = temp_merged_df.columns[
+            temp_merged_df.columns.duplicated()
         ].tolist()
 
         if duplicate_cols:
@@ -84,18 +99,48 @@ if data_frames:
                 f"Duplicate columns removed: {duplicate_cols}"
             )
 
-        merged_df = merged_df.loc[
+        temp_merged_df = temp_merged_df.loc[
             :,
-            ~merged_df.columns.duplicated()
+            ~temp_merged_df.columns.duplicated()
         ]
 
-    file_fingerprint = [f.name for f in uploaded_files]
+    temp_merged_df = temp_merged_df.replace(
+        ["None", "none", "NaN", "nan", ""],
+        pd.NA
+    )
+
+    st.session_state.merged_df = temp_merged_df.copy()
+
+    merged_df = st.session_state.merged_df
+
+    file_fingerprint = [
+        (
+            f.name,
+            hashlib.md5(f.getvalue()).hexdigest()
+        )
+        for f in uploaded_files
+    ]
 
     if st.session_state.get("file_fingerprint") != file_fingerprint:
 
         st.session_state.file_fingerprint = file_fingerprint
 
         st.session_state.cleaned_df = merged_df.copy()
+
+        for col in st.session_state.cleaned_df.columns:
+
+            try:
+
+                st.session_state.cleaned_df[col] = pd.to_numeric(
+                    st.session_state.cleaned_df[col]
+                )
+
+            except:
+
+                pass
+
+        st.session_state.history = []
+        st.session_state.selected_columns = []
 
     st.write("Merged DataFrame:")
     st.dataframe(merged_df)
@@ -107,40 +152,47 @@ if data_frames:
     st.title("Data Cleaning Part")
 
     st.write("No of missing values in each column:")
-    st.write(merged_df.isnull().sum())
+    st.write(st.session_state.cleaned_df.isnull().sum())
 
     st.write("Data types of each column:")
-    st.write(merged_df.dtypes)
-
-    st.write(
-        f"Total columns: {len(merged_df.columns)}"
-    )
+    st.write(st.session_state.cleaned_df.dtypes)
 
     available_cols = merged_df.columns.tolist()
 
-    with st.form("cleaning_form"):
+    with st.form("column_selection_form"):
 
-        selected_columns = st.multiselect(
-            "Select columns to clean (or select all):",
+        temp_selected_columns = st.multiselect(
+            "Select columns to clean:",
             options=available_cols,
-            default=available_cols
+            default=st.session_state.selected_columns
         )
 
-        selected_columns = [
-            col for col in selected_columns
-            if col in st.session_state.cleaned_df.columns
-        ]
+        submit_columns = st.form_submit_button(
+            "Confirm Selected Columns"
+        )
 
-        if selected_columns:
+    if submit_columns:
+
+        st.session_state.selected_columns = (
+            temp_selected_columns
+        )
+
+    selected_columns = st.session_state.selected_columns
+
+    if selected_columns:
+
+        with st.form("cleaning_form"):
 
             apply_to_all = st.checkbox(
                 "Apply same cleaning method to all selected columns"
             )
 
+            cleaning_choices = {}
+
             if apply_to_all:
 
                 cleaning_method = st.selectbox(
-                    "Select cleaning method for all selected columns:",
+                    "Select cleaning method:",
                     [
                         "Mean",
                         "Median",
@@ -151,109 +203,28 @@ if data_frames:
                     ]
                 )
 
-                apply_all = st.form_submit_button("Apply cleaning")
-
-                if apply_all:
-
-                    drop_cols = []
-
-                    for col in selected_columns:
-
-                        if cleaning_method == "Skip":
-                            pass
-
-                        elif cleaning_method == "Mean":
-
-                            if pd.api.types.is_numeric_dtype(
-                                st.session_state.cleaned_df[col]
-                            ):
-
-                                st.session_state.cleaned_df[col] = (
-                                    st.session_state.cleaned_df[col]
-                                    .fillna(
-                                        st.session_state.cleaned_df[col]
-                                        .mean()
-                                    )
-                                )
-
-                            else:
-
-                                st.warning(
-                                    f"{col} is not numeric. Skipping."
-                                )
-
-                        elif cleaning_method == "Median":
-
-                            if pd.api.types.is_numeric_dtype(
-                                st.session_state.cleaned_df[col]
-                            ):
-
-                                st.session_state.cleaned_df[col] = (
-                                    st.session_state.cleaned_df[col]
-                                    .fillna(
-                                        st.session_state.cleaned_df[col]
-                                        .median()
-                                    )
-                                )
-
-                            else:
-
-                                st.warning(
-                                    f"{col} is not numeric. Skipping."
-                                )
-
-                        elif cleaning_method == "Mode":
-
-                            mode_values = (
-                                st.session_state.cleaned_df[col]
-                                .mode()
-                            )
-
-                            if len(mode_values) > 0:
-
-                                st.session_state.cleaned_df[col] = (
-                                    st.session_state.cleaned_df[col]
-                                    .fillna(mode_values[0])
-                                )
-
-                        elif cleaning_method == "Drop Rows":
-
-                            drop_cols.append(col)
-
-                        elif cleaning_method == "Drop Columns":
-
-                            st.session_state.cleaned_df = (
-                                st.session_state.cleaned_df.drop(
-                                    columns=[col]
-                                )
-                            )
-
-                    if drop_cols:
-
-                        st.session_state.cleaned_df = (
-                            st.session_state.cleaned_df.dropna(
-                                subset=drop_cols
-                            )
-                        )
-
-                    st.success("Cleaning applied!")
-
             else:
-
-                st.write("Or clean columns individually:")
-
-                cleaning_choices = {}
 
                 for idx, col in enumerate(selected_columns):
 
+                    current_missing = (
+                        st.session_state.cleaned_df[col].isnull().sum()
+                        if col in st.session_state.cleaned_df.columns
+                        else merged_df[col].isnull().sum()
+                    )
+
                     with st.expander(
-                        f"{col} "
-                        f"({st.session_state.cleaned_df[col].isnull().sum()} "
-                        f"missing values)"
+                        f"{col} ({current_missing} missing values)"
                     ):
 
-                        if pd.api.types.is_numeric_dtype(
+                        series_for_type = (
                             st.session_state.cleaned_df[col]
+                            if col in st.session_state.cleaned_df.columns
+                            else merged_df[col]
+                        )
+
+                        if pd.api.types.is_numeric_dtype(
+                            series_for_type
                         ):
 
                             options = [
@@ -274,96 +245,205 @@ if data_frames:
                                 "Skip"
                             ]
 
-                        option = st.selectbox(
+                        cleaning_choices[col] = st.selectbox(
                             f"Cleaning method for {col}",
                             options,
-                            key=f"{idx}_{col}"
+                            key=f"{col}_{idx}"
                         )
 
-                        cleaning_choices[col] = option
+            submit_cleaning = st.form_submit_button(
+                "Apply Cleaning"
+            )
 
-                apply_individual = st.form_submit_button(
-                    "Apply Individual Cleaning"
-                )
+        if submit_cleaning:
 
-                if apply_individual:
+            st.session_state.history.append(
+                st.session_state.cleaned_df.copy()
+            )
 
-                    drop_rows_cols = []
-                    drop_columns = []
+            drop_rows = []
+            drop_columns = []
+            skipped_cols = []
 
-                    for col, option in cleaning_choices.items():
+            if apply_to_all:
+
+                for col in selected_columns:
+
+                    if col in st.session_state.cleaned_df.columns:
 
                         series = st.session_state.cleaned_df[col]
 
-                        if option == "Skip":
-                            pass
+                    else:
 
-                        elif option == "Mean":
+                        st.session_state.cleaned_df[col] = merged_df[col]
+
+                        series = st.session_state.cleaned_df[col]
+
+                    if cleaning_method == "Skip":
+                        pass
+
+                    elif cleaning_method == "Mean":
+
+                        if pd.api.types.is_numeric_dtype(series):
 
                             st.session_state.cleaned_df[col] = (
                                 series.fillna(series.mean())
                             )
 
-                        elif option == "Median":
+                        else:
+                            skipped_cols.append(col)
+
+                    elif cleaning_method == "Median":
+
+                        if pd.api.types.is_numeric_dtype(series):
 
                             st.session_state.cleaned_df[col] = (
                                 series.fillna(series.median())
                             )
 
-                        elif option == "Mode":
+                        else:
+                            skipped_cols.append(col)
 
-                            mode_values = series.mode()
+                    elif cleaning_method == "Mode":
 
-                            if len(mode_values) > 0:
+                        mode_values = series.mode()
 
-                                st.session_state.cleaned_df[col] = (
-                                    series.fillna(mode_values[0])
-                                )
+                        if len(mode_values) > 0:
 
-                        elif option == "Drop Rows":
-
-                            drop_rows_cols.append(col)
-
-                        elif option == "Drop Columns":
-
-                            drop_columns.append(col)
-
-                    if drop_rows_cols:
-
-                        st.session_state.cleaned_df = (
-                            st.session_state.cleaned_df.dropna(
-                                subset=drop_rows_cols
+                            st.session_state.cleaned_df[col] = (
+                                series.fillna(mode_values[0])
                             )
+
+                    elif cleaning_method == "Drop Rows":
+
+                        drop_rows.append(col)
+
+                    elif cleaning_method == "Drop Columns":
+
+                        drop_columns.append(col)
+
+            else:
+
+                for col, option in cleaning_choices.items():
+
+                    if col in st.session_state.cleaned_df.columns:
+
+                        series = st.session_state.cleaned_df[col]
+
+                    else:
+
+                        st.session_state.cleaned_df[col] = merged_df[col]
+
+                        series = st.session_state.cleaned_df[col]
+
+                    if option == "Skip":
+                        pass
+
+                    elif option == "Mean":
+
+                        st.session_state.cleaned_df[col] = (
+                            series.fillna(series.mean())
                         )
 
-                    if drop_columns:
+                    elif option == "Median":
 
-                        st.session_state.cleaned_df = (
-                            st.session_state.cleaned_df.drop(
-                                columns=drop_columns
-                            )
+                        st.session_state.cleaned_df[col] = (
+                            series.fillna(series.median())
                         )
 
-                    st.success("Individual cleaning applied!")
+                    elif option == "Mode":
 
-    if st.button("Reset Cleaned Data"):
+                        mode_values = series.mode()
 
-        st.session_state.cleaned_df = merged_df.copy()
+                        if len(mode_values) > 0:
 
-        st.success("Cleaned data reset!")
+                            st.session_state.cleaned_df[col] = (
+                                series.fillna(mode_values[0])
+                            )
+
+                    elif option == "Drop Rows":
+
+                        drop_rows.append(col)
+
+                    elif option == "Drop Columns":
+
+                        drop_columns.append(col)
+
+            if drop_rows:
+
+                st.session_state.cleaned_df = (
+                    st.session_state.cleaned_df.dropna(
+                        subset=drop_rows
+                    )
+                )
+
+            if drop_columns:
+
+                st.session_state.cleaned_df = (
+                    st.session_state.cleaned_df.drop(
+                        columns=drop_columns,
+                        errors="ignore"
+                    )
+                )
+
+            if skipped_cols:
+
+                st.warning(
+                    f"Skipped non-numeric columns: {skipped_cols}"
+                )
+
+            st.success("Cleaning applied!")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        if st.button("Undo Last Action"):
+
+            if st.session_state.history:
+
+                st.session_state.cleaned_df = (
+                    st.session_state.history.pop()
+                )
+
+                st.success("Undo successful!")
+
+            else:
+
+                st.warning("Nothing to undo.")
+
+    with col2:
+
+        if st.button("Reset Cleaned Data"):
+
+            current_selected_columns = (
+                st.session_state.selected_columns
+            )
+
+            st.session_state.cleaned_df = merged_df.copy()
+
+            st.session_state.history = []
+
+            st.session_state.selected_columns = (
+                current_selected_columns
+            )
+
+            st.success("Cleaned data reset!")
 
     st.write("Cleaned DataFrame:")
     st.dataframe(st.session_state.cleaned_df)
 
-    csv = (
+    st.session_state.csv_data = (
         st.session_state.cleaned_df
-        .to_csv(index=False)
+        .to_csv(index=False, na_rep="")
         .encode("utf-8")
     )
 
-    st.download_button(
-        label="Download Cleaned Data",
-        data=csv,
-        file_name="cleaned_data.csv",
-        mime="text/csv"
-    )
+    if st.session_state.csv_data:
+
+        st.download_button(
+            label="Download Cleaned Data",
+            data=st.session_state.csv_data,
+            file_name="cleaned_data.csv",
+            mime="text/csv"
+        )
