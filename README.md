@@ -96,7 +96,7 @@ your-repo/
 ---
 
 ## Screenshots
-> `![Upload Section](screenshots/upload.png)`
+> (screenshots/upload.png)`
 
 ---
 
