@@ -6,7 +6,7 @@ A web app built with Streamlit that lets you upload, merge, clean, and explore y
 
 ## Live Demo
 
-[your-app-name.streamlit.app](https://EDA-APP.streamlit.app)
+[EDA-APP](https://EDA-APP.streamlit.app)
 
 ---
 
@@ -96,15 +96,15 @@ your-repo/
 ---
 
 ## Screenshots
-> `![Upload Section](screenshots/upload.png)`
+> (screenshots/upload.png)`
 
 ---
 
 ## Author
 
 **Your Name**
-- GitHub: [@your-username](https://github.com/moniishms)
-- LinkedIn: [your-linkedin](https://www.linkedin.com/in/moniish-mohan-srinivasan-9266a8318/)
+- GitHub: [My GitHub](https://github.com/moniishms)
+- LinkedIn: [My LinkedIn](https://www.linkedin.com/in/moniish-mohan-srinivasan-9266a8318/)
 
 ---
 
