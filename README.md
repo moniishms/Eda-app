@@ -6,7 +6,7 @@ A web app built with Streamlit that lets you upload, merge, clean, and explore y
 
 ## Live Demo
 
-[your-app-name.streamlit.app](https://your-app-name.streamlit.app)
+[your-app-name.streamlit.app](https://EDA-APP.streamlit.app)
 
 ---
 
@@ -54,7 +54,7 @@ A web app built with Streamlit that lets you upload, merge, clean, and explore y
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/your-username/your-repo-name.git
+git clone https://github.com/moniishms/EDA-APP.git
 cd your-repo-name
 ```
 
@@ -103,8 +103,8 @@ your-repo/
 ## Author
 
 **Your Name**
-- GitHub: [@your-username](https://github.com/your-username)
-- LinkedIn: [your-linkedin](https://linkedin.com/in/your-linkedin)
+- GitHub: [@your-username](https://github.com/moniishms)
+- LinkedIn: [your-linkedin](https://www.linkedin.com/in/moniish-mohan-srinivasan-9266a8318/)
 
 ---
 
