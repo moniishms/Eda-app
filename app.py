@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import hashlib
 
+st.set_page_config(layout="wide")
+
 if "cleaned_df" not in st.session_state:
     st.session_state.cleaned_df = pd.DataFrame()
 
@@ -47,9 +49,11 @@ for files in uploaded_files:
     try:
 
         if files.name.endswith(".xlsx"):
+
             df = pd.read_excel(files)
 
         elif files.name.endswith(".csv"):
+
             df = pd.read_csv(files)
 
         data_frames.append(df)
@@ -280,6 +284,7 @@ if uploaded_files and data_frames:
                         series = st.session_state.cleaned_df[col]
 
                     if cleaning_method == "Skip":
+
                         pass
 
                     elif cleaning_method == "Mean":
@@ -291,6 +296,7 @@ if uploaded_files and data_frames:
                             )
 
                         else:
+
                             skipped_cols.append(col)
 
                     elif cleaning_method == "Median":
@@ -302,6 +308,7 @@ if uploaded_files and data_frames:
                             )
 
                         else:
+
                             skipped_cols.append(col)
 
                     elif cleaning_method == "Mode":
@@ -337,19 +344,24 @@ if uploaded_files and data_frames:
                         series = st.session_state.cleaned_df[col]
 
                     if option == "Skip":
+
                         pass
 
                     elif option == "Mean":
 
-                        st.session_state.cleaned_df[col] = (
-                            series.fillna(series.mean())
-                        )
+                        if pd.api.types.is_numeric_dtype(series):
+
+                            st.session_state.cleaned_df[col] = (
+                                series.fillna(series.mean())
+                            )
 
                     elif option == "Median":
 
-                        st.session_state.cleaned_df[col] = (
-                            series.fillna(series.median())
-                        )
+                        if pd.api.types.is_numeric_dtype(series):
+
+                            st.session_state.cleaned_df[col] = (
+                                series.fillna(series.median())
+                            )
 
                     elif option == "Mode":
 
@@ -447,3 +459,250 @@ if uploaded_files and data_frames:
             file_name="cleaned_data.csv",
             mime="text/csv"
         )
+
+    # =========================
+    # EDA SECTION
+    # =========================
+
+    if not st.session_state.cleaned_df.empty:
+
+        st.title("EDA Visualization")
+
+        numeric_cols = [
+            col for col in
+            st.session_state.cleaned_df
+            .select_dtypes(include=["number"])
+            .columns
+            if "id" not in col.lower()
+        ]
+
+        # =========================
+        # Dataset Information
+        # =========================
+
+        st.subheader("Dataset Information")
+
+        st.write(
+            f"Rows: {st.session_state.cleaned_df.shape[0]}"
+        )
+
+        st.write(
+            f"Columns: {st.session_state.cleaned_df.shape[1]}"
+        )
+
+        st.write(
+            f"Duplicate Rows: "
+            f"{st.session_state.cleaned_df.duplicated().sum()}"
+        )
+
+        # =========================
+        # Summary Statistics
+        # =========================
+
+        st.subheader("Summary Statistics")
+
+        try:
+
+            st.dataframe(
+                st.session_state.cleaned_df
+                .describe(include="all")
+                .T
+            )
+
+        except Exception as e:
+
+            st.warning(
+                f"Could not generate summary statistics: {e}"
+            )
+
+
+        # =========================
+        # Correlation Heatmap
+        # =========================
+
+        if len(numeric_cols) > 1:
+
+            st.subheader("Correlation Heatmap")
+
+            corr_matrix = (
+                st.session_state.cleaned_df[numeric_cols]
+                .corr()
+            )
+
+            fig, ax = plt.subplots(figsize=(12, 8))
+
+            sns.heatmap(
+                corr_matrix,
+                annot=True,
+                fmt=".2f",
+                cmap="coolwarm",
+                linewidths=0.5,
+                annot_kws={"size": 8},
+                ax=ax
+            )
+
+            plt.xticks(rotation=45, ha="right")
+            plt.yticks(rotation=0)
+
+            st.pyplot(fig)
+            plt.close(fig)
+
+        else:
+
+            st.info(
+                "Need at least 2 numeric columns for correlation heatmap."
+            )
+
+        # =========================
+        # Distribution + Boxplot
+        # =========================
+
+        if numeric_cols:
+
+            with st.form("visualization_form"):
+
+                dist_col = st.selectbox(
+                    "Select column for distribution plot",
+                    numeric_cols,
+                    key="distribution_col"
+                )
+
+                box_col = st.selectbox(
+                    "Select column for box plot",
+                    numeric_cols,
+                    key="boxplot_col"
+                )
+
+                visualize = st.form_submit_button(
+                    "Generate Visualizations"
+                )
+
+            if visualize:
+
+                # =========================
+                # Distribution Plot
+                # =========================
+
+                st.subheader("Distribution Plot")
+
+                unique_values = (
+                    st.session_state.cleaned_df[dist_col]
+                    .nunique()
+                )
+
+                fig, ax = plt.subplots(figsize=(8, 5))
+
+                if unique_values <= 10:
+
+                    sns.countplot(
+                        x=st.session_state.cleaned_df[dist_col],
+                        ax=ax
+                    )
+
+                else:
+
+                    sns.histplot(
+                        st.session_state.cleaned_df[dist_col].dropna(),
+                        kde=True,
+                        ax=ax
+                    )
+
+                st.pyplot(fig)
+                plt.close(fig)
+
+                skewness = (
+                    st.session_state.cleaned_df[dist_col]
+                    .skew()
+                )
+
+                if abs(skewness) < 0.5:
+
+                    skew_type = "Approximately Normal"
+
+                elif skewness > 0:
+
+                    skew_type = "Right Skewed"
+
+                else:
+
+                    skew_type = "Left Skewed"
+
+                st.write(
+                    f"Skewness Value: {round(skewness, 2)}"
+                )
+
+                st.write(
+                    f"Distribution Type: {skew_type}"
+                )
+
+                # =========================
+                # Box Plot
+                # =========================
+
+                st.subheader(
+                    "Box Plot for Outlier Detection"
+                )
+
+                if (
+                    st.session_state.cleaned_df[box_col]
+                    .dropna()
+                    .empty
+                ):
+
+                    st.warning(
+                        f"{box_col} has no valid data to plot."
+                    )
+
+                else:
+
+                    fig, ax = plt.subplots(figsize=(8, 5))
+
+                    sns.boxplot(
+                        x=st.session_state.cleaned_df[box_col],
+                        ax=ax
+                    )
+
+                    st.pyplot(fig)
+                    plt.close(fig)
+
+                    Q1 = (
+                        st.session_state.cleaned_df[box_col]
+                        .quantile(0.25)
+                    )
+
+                    Q3 = (
+                        st.session_state.cleaned_df[box_col]
+                        .quantile(0.75)
+                    )
+
+                    IQR = Q3 - Q1
+
+                    lower_bound = (
+                        Q1 - 1.5 * IQR
+                    )
+
+                    upper_bound = (
+                        Q3 + 1.5 * IQR
+                    )
+
+                    outliers = st.session_state.cleaned_df[
+                        (
+                            st.session_state.cleaned_df[box_col]
+                            < lower_bound
+                        )
+                        |
+                        (
+                            st.session_state.cleaned_df[box_col]
+                            > upper_bound
+                        )
+                    ]
+
+                    st.write(
+                        f"Number of outliers: {len(outliers)}"
+                    )
+
+        else:
+
+            st.warning(
+                "No numeric columns available for visualization."
+            )
