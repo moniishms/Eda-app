@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import hashlib
@@ -64,12 +65,31 @@ for files in uploaded_files:
 
 if uploaded_files and data_frames:
 
+    st.warning(
+        "Use Row-wise merge for demo datasets. Column-wise merge is only recommended for datasets with matching row structures."
+    )
+
     merge_type = st.selectbox(
         "Select merge type",
-        ["Row-wise", "Column-wise"]
+        ["Row-wise", "Column-wise"],
+        index=0
     )
 
     if merge_type == "Row-wise":
+
+        if len(data_frames) > 1:
+            common_cols = set.intersection(
+                *[set(df.columns) for df in data_frames]
+            )
+            union_cols = set.union(
+                *[set(df.columns) for df in data_frames]
+            )
+            similarity = len(common_cols) / len(union_cols) if union_cols else 1.0
+
+            if similarity < 0.8:
+                st.warning(
+                    "Row-wise merge may create NaN values because uploaded files have different columns."
+                )
 
         temp_merged_df = pd.concat(
             data_frames,
@@ -89,7 +109,7 @@ if uploaded_files and data_frames:
             st.stop()
 
         temp_merged_df = pd.concat(
-            data_frames,
+            [df.reset_index(drop=True) for df in data_frames],
             axis=1
         )
 
@@ -108,6 +128,7 @@ if uploaded_files and data_frames:
             ~temp_merged_df.columns.duplicated()
         ]
 
+    # Replace empty strings and string representations of null with pd.NA
     temp_merged_df = temp_merged_df.replace(
         ["None", "none", "NaN", "nan", ""],
         pd.NA
@@ -117,10 +138,12 @@ if uploaded_files and data_frames:
 
     merged_df = st.session_state.merged_df
 
+
     file_fingerprint = [
         (
             f.name,
-            hashlib.md5(f.getvalue()).hexdigest()
+            hashlib.md5(f.getvalue()).hexdigest(),
+            merge_type
         )
         for f in uploaded_files
     ]
@@ -143,7 +166,7 @@ if uploaded_files and data_frames:
 
                 pass
 
-        st.session_state.history = []
+        st.session_state.history = [st.session_state.cleaned_df.copy()]
         st.session_state.selected_columns = []
 
     st.write("Merged DataFrame:")
@@ -153,13 +176,26 @@ if uploaded_files and data_frames:
         f"Shape of merged DataFrame: {merged_df.shape}"
     )
 
+    # Detailed missing values analysis at merge level
+    st.write("**Missing Values in Merged Data (by column):**")
+    merge_missing_df = pd.DataFrame({
+        "Column": merged_df.columns,
+        "Missing Values": merged_df.isnull().sum().values,
+        "Missing %": (merged_df.isnull().sum().values / len(merged_df) * 100).round(2),
+        "Non-Null Count": merged_df.notnull().sum().values
+    })
+    st.dataframe(merge_missing_df, use_container_width=True)
+
     st.title("Data Cleaning Part")
 
-    st.write("No of missing values in each column:")
-    st.write(st.session_state.cleaned_df.isnull().sum())
+   
 
     st.write("Data types of each column:")
-    st.write(st.session_state.cleaned_df.dtypes)
+    dtypes_df = pd.DataFrame({
+        "Column": st.session_state.cleaned_df.columns,
+        "Data Type": st.session_state.cleaned_df.dtypes.values
+    })
+    st.dataframe(dtypes_df, use_container_width=True)
 
     available_cols = merged_df.columns.tolist()
 
@@ -218,7 +254,7 @@ if uploaded_files and data_frames:
                     )
 
                     with st.expander(
-                        f"{col} ({current_missing} missing values)"
+                        f"{col}"
                     ):
 
                         series_for_type = (
@@ -432,15 +468,18 @@ if uploaded_files and data_frames:
                 st.session_state.selected_columns
             )
 
-            st.session_state.cleaned_df = merged_df.copy()
+            if not st.session_state.cleaned_df.equals(merged_df):
+                st.session_state.history.append(
+                    st.session_state.cleaned_df.copy()
+                )
 
-            st.session_state.history = []
+            st.session_state.cleaned_df = merged_df.copy()
 
             st.session_state.selected_columns = (
                 current_selected_columns
             )
 
-            st.success("Cleaned data reset!")
+            st.success("Cleaned data reset! You can undo this reset if needed.")
 
     st.write("Cleaned DataFrame:")
     st.dataframe(st.session_state.cleaned_df)
@@ -554,155 +593,230 @@ if uploaded_files and data_frames:
             )
 
         # =========================
-        # Distribution + Boxplot
+        # Distribution + Boxplot + Bar Chart
         # =========================
 
+        cat_cols = [
+            col for col in
+            st.session_state.cleaned_df
+            .select_dtypes(include=["object", "category"]).columns
+            if any(keyword in col.lower() for keyword in [
+                "region",
+                "category",
+                "segment",
+                "ship mode",
+                "ship_mode",
+                "shipmode"
+            ])
+        ]
+        other_cat_cols = [
+            col for col in
+            st.session_state.cleaned_df
+            .select_dtypes(include=["object", "category"]).columns
+            if col not in cat_cols
+        ]
+        category_cols = list(dict.fromkeys(cat_cols + other_cat_cols))
+
         if numeric_cols:
+            dist_col = st.selectbox(
+                "Distribution column",
+                numeric_cols,
+                index=0,
+                key="distribution_col"
+            )
+            box_col = st.selectbox(
+                "Box plot column",
+                numeric_cols,
+                index=0,
+                key="boxplot_col"
+            )
+        else:
+            dist_col = None
+            box_col = None
 
-            with st.form("visualization_form"):
+        if category_cols and numeric_cols:
+            category_col = st.selectbox(
+                "Category column",
+                category_cols,
+                index=0,
+                key="bar_category_col"
+            )
+            metric_col = st.selectbox(
+                "Numeric metric column",
+                numeric_cols,
+                index=0,
+                key="bar_metric_col"
+            )
+            top_n = st.slider(
+                "Top N categories to display",
+                min_value=5,
+                max_value=20,
+                value=10,
+                step=1,
+                key="top_n_categories"
+            )
+        else:
+            category_col = None
+            metric_col = None
+            top_n = 10
 
-                dist_col = st.selectbox(
-                    "Select column for distribution plot",
-                    numeric_cols,
-                    key="distribution_col"
+        if numeric_cols:
+            st.markdown("---")
+            st.subheader("Distribution Plot")
+            dist_series = st.session_state.cleaned_df[dist_col].dropna()
+            dist_skew = dist_series.skew() if not dist_series.empty else 0
+            use_log_x = (
+                dist_series.min() > 0 and abs(dist_skew) > 1.5
+                and dist_series.max() / max(dist_series.quantile(0.75), 1) > 50
+            )
+
+            fig, ax = plt.subplots(figsize=(10, 5))
+            if dist_series.nunique() <= 10:
+                sns.countplot(
+                    data=st.session_state.cleaned_df,
+                    x=dist_col,
+                    ax=ax,
+                    palette="viridis"
                 )
-
-                box_col = st.selectbox(
-                    "Select column for box plot",
-                    numeric_cols,
-                    key="boxplot_col"
+            else:
+                sns.histplot(
+                    dist_series,
+                    kde=True,
+                    ax=ax,
+                    bins=30,
+                    color="#2c7fb8",
+                    edgecolor="black",
+                    alpha=0.85
                 )
+                if use_log_x:
+                    ax.set_xscale("log")
+            ax.set_title(
+                f"Distribution of {dist_col}",
+                fontsize=16,
+                fontweight="bold"
+            )
+            ax.set_xlabel(dist_col, fontsize=11)
+            ax.set_ylabel("Frequency", fontsize=11)
+            ax.grid(axis="y", alpha=0.2, linestyle="--")
+            ax.tick_params(axis="both", labelsize=10)
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
 
-                visualize = st.form_submit_button(
-                    "Generate Visualizations"
+            skew_type = "Approximately Normal"
+            if abs(dist_skew) >= 0.5:
+                skew_type = "Right Skewed" if dist_skew > 0 else "Left Skewed"
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Skewness", f"{round(dist_skew, 3)}")
+            with col2:
+                st.metric("Distribution type", skew_type)
+            with col3:
+                st.metric("Unique values", dist_series.nunique())
+
+            st.markdown("---")
+            st.subheader("Box Plot for Outlier Detection")
+            box_series = st.session_state.cleaned_df[box_col].dropna()
+            if box_series.empty:
+                st.warning(f"{box_col} has no valid data to plot.")
+            else:
+                fig, ax = plt.subplots(figsize=(10, 5))
+                sns.boxplot(
+                    y=box_series,
+                    ax=ax,
+                    color="#9ecae1",
+                    linewidth=2
                 )
-
-            if visualize:
-
-                # =========================
-                # Distribution Plot
-                # =========================
-
-                st.subheader("Distribution Plot")
-
-                unique_values = (
-                    st.session_state.cleaned_df[dist_col]
-                    .nunique()
+                box_skew = box_series.skew()
+                if box_series.min() > 0 and abs(box_skew) > 1.5:
+                    ax.set_yscale("log")
+                ax.set_title(
+                    f"Box Plot of {box_col}",
+                    fontsize=16,
+                    fontweight="bold"
                 )
-
-                fig, ax = plt.subplots(figsize=(8, 5))
-
-                if unique_values <= 10:
-
-                    sns.countplot(
-                        x=st.session_state.cleaned_df[dist_col],
-                        ax=ax
-                    )
-
-                else:
-
-                    sns.histplot(
-                        st.session_state.cleaned_df[dist_col].dropna(),
-                        kde=True,
-                        ax=ax
-                    )
-
+                ax.set_ylabel(box_col, fontsize=11)
+                ax.grid(axis="y", alpha=0.2, linestyle="--")
+                ax.tick_params(axis="both", labelsize=10)
+                plt.tight_layout()
                 st.pyplot(fig)
                 plt.close(fig)
 
-                skewness = (
-                    st.session_state.cleaned_df[dist_col]
-                    .skew()
-                )
+                Q1 = box_series.quantile(0.25)
+                Q3 = box_series.quantile(0.75)
+                IQR = Q3 - Q1
+                lower_bound = Q1 - 1.5 * IQR
+                upper_bound = Q3 + 1.5 * IQR
+                outliers = box_series[(box_series < lower_bound) | (box_series > upper_bound)]
 
-                if abs(skewness) < 0.5:
-
-                    skew_type = "Approximately Normal"
-
-                elif skewness > 0:
-
-                    skew_type = "Right Skewed"
-
-                else:
-
-                    skew_type = "Left Skewed"
-
-                st.write(
-                    f"Skewness Value: {round(skewness, 2)}"
-                )
-
-                st.write(
-                    f"Distribution Type: {skew_type}"
-                )
-
-                # =========================
-                # Box Plot
-                # =========================
-
-                st.subheader(
-                    "Box Plot for Outlier Detection"
-                )
-
-                if (
-                    st.session_state.cleaned_df[box_col]
-                    .dropna()
-                    .empty
-                ):
-
-                    st.warning(
-                        f"{box_col} has no valid data to plot."
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Q1", f"{round(Q1, 2)}")
+                with col2:
+                    st.metric("Q3", f"{round(Q3, 2)}")
+                with col3:
+                    st.metric("IQR", f"{round(IQR, 2)}")
+                with col4:
+                    st.metric(
+                        "Outliers",
+                        len(outliers),
                     )
-
-                else:
-
-                    fig, ax = plt.subplots(figsize=(8, 5))
-
-                    sns.boxplot(
-                        x=st.session_state.cleaned_df[box_col],
-                        ax=ax
-                    )
-
-                    st.pyplot(fig)
-                    plt.close(fig)
-
-                    Q1 = (
-                        st.session_state.cleaned_df[box_col]
-                        .quantile(0.25)
-                    )
-
-                    Q3 = (
-                        st.session_state.cleaned_df[box_col]
-                        .quantile(0.75)
-                    )
-
-                    IQR = Q3 - Q1
-
-                    lower_bound = (
-                        Q1 - 1.5 * IQR
-                    )
-
-                    upper_bound = (
-                        Q3 + 1.5 * IQR
-                    )
-
-                    outliers = st.session_state.cleaned_df[
-                        (
-                            st.session_state.cleaned_df[box_col]
-                            < lower_bound
-                        )
-                        |
-                        (
-                            st.session_state.cleaned_df[box_col]
-                            > upper_bound
-                        )
-                    ]
-
-                    st.write(
-                        f"Number of outliers: {len(outliers)}"
-                    )
-
         else:
+            st.info("No numeric columns available for distribution and boxplot charts.")
 
+        if category_col is not None and metric_col is not None:
+            st.markdown("---")
+            st.subheader("Bar Chart - Metric by Category")
+            grouped = (
+                st.session_state.cleaned_df
+                .dropna(subset=[category_col, metric_col])
+                .groupby(category_col)[metric_col]
+                .sum()
+                .sort_values(ascending=False)
+            )
+            grouped = grouped.head(top_n)
+
+            fig, ax = plt.subplots(figsize=(10, 5))
+            bars = ax.bar(
+                range(len(grouped)),
+                grouped.values,
+                color="#2ca25f",
+                edgecolor="black",
+                linewidth=1.2,
+                alpha=0.85
+            )
+            ax.set_xticks(range(len(grouped)))
+            ax.set_xticklabels(
+                [str(x) for x in grouped.index],
+                rotation=45,
+                ha="right",
+                fontsize=10
+            )
+            ax.set_title(
+                f"{metric_col} by {category_col}",
+                fontsize=16,
+                fontweight="bold"
+            )
+            ax.set_xlabel(category_col, fontsize=11)
+            ax.set_ylabel(f"Total {metric_col}", fontsize=11)
+            ax.grid(axis="y", alpha=0.2, linestyle="--")
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2.,
+                    height,
+                    f"{round(height, 2)}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9
+                )
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
+        elif category_cols and numeric_cols:
+            st.warning("No categories were available after data cleaning to build a bar chart.")
+        else:
             st.warning(
-                "No numeric columns available for visualization."
+                "Need both a numeric metric and a categorical grouping column for the bar chart."
             )
