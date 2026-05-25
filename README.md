@@ -53,20 +53,10 @@ A web app built with Streamlit that lets you upload, merge, clean, and explore y
 ## Run Locally
 
 **1. Clone the repository**
-```bash
-git clone https://github.com/moniishms/EDA-APP.git
-cd your-repo-name
-```
 
 **2. Install dependencies**
-```bash
-pip install -r requirements.txt
-```
 
 **3. Run the app**
-```bash
-streamlit run app.py
-```
 
 The app will open at `http://localhost:8501`
 
@@ -87,10 +77,10 @@ openpyxl
 ## Project Structure
 
 ```
-your-repo/
-├── app.py            # Main application
-├── requirements.txt  # Python dependencies
-└── README.md         # Project documentation
+EDA-APP/
+├── app.py           
+├── requirements.txt  
+└── README.md         
 ```
 
 ---
@@ -101,11 +91,7 @@ your-repo/
 ---
 
 ## Author
-
-**Your Name**
-- GitHub: [My GitHub](https://github.com/moniishms)
-- LinkedIn: [My LinkedIn](https://www.linkedin.com/in/moniish-mohan-srinivasan-9266a8318/)
-
+M.S.Moniish
 ---
 
 
