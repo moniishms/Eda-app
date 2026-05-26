@@ -86,7 +86,7 @@ EDA-APP/
 ---
 
 ## Screenshots
-> (screenshots/upload.png)`
+> (screenshots/)`
 
 ---
 
