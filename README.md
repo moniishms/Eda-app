@@ -6,7 +6,7 @@ A web app built with Streamlit that lets you upload, merge, clean, and explore y
 
 ## Live Demo
 
-[EDA-APP](https://EDA-APP.streamlit.app)
+[EDA-APP](https://eda-app123.streamlit.app/)
 
 ---
 
