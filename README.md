@@ -86,7 +86,49 @@ EDA-APP/
 ---
 
 ## Screenshots
-> (screenshots/)`
+
+### Screenshot 1
+![Screenshot 1](screenshots/Screenshot%202026-05-25%20233025.png)
+
+---
+
+### Screenshot 2
+![Screenshot 2](screenshots/Screenshot%202026-05-25%20233042.png)
+
+---
+
+### Screenshot 3
+![Screenshot 3](screenshots/Screenshot%202026-05-25%20233059.png)
+
+---
+
+### Screenshot 4
+![Screenshot 4](screenshots/Screenshot%202026-05-25%20233110.png)
+
+---
+
+### Screenshot 5
+![Screenshot 5](screenshots/Screenshot%202026-05-25%20233121.png)
+
+---
+
+### Screenshot 6
+![Screenshot 6](screenshots/Screenshot%202026-05-25%20233133.png)
+
+---
+
+### Screenshot 7
+![Screenshot 7](screenshots/Screenshot%202026-05-25%20233144.png)
+
+---
+
+### Screenshot 8
+![Screenshot 8](screenshots/Screenshot%202026-05-25%20233158.png)
+
+---
+
+### Screenshot 9
+![Screenshot 9](screenshots/Screenshot%202026-05-25%20233208.png)
 
 ---
 
